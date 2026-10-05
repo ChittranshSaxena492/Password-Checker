@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>पासवर्ड चेकर</title>
+
+  <!-- ===== CSS: दिखावट (रंग, साइज़, लेआउट) ===== -->
+  <style>
+    :root {
+      --bg: #eef2f6;
+      --ink: #14213d;
+      --muted: #5b6577;
+      --line: #cfd6e0;
+      --weak: #c8372d;
+      --ok: #d99a00;
+      --strong: #1e8a5b;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 20px;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: "Hind", "Noto Sans Devanagari", system-ui, sans-serif;
+    }
+    main { width: 100%; max-width: 440px; }
+    h1 { font-size: 1.9rem; margin: 0 0 6px; }
+    p.sub { margin: 0 0 22px; color: var(--muted); }
+
+    .field { display: flex; gap: 8px; }
+    input {
+      flex: 1;
+      font: inherit;
+      font-size: 1.1rem;
+      padding: 12px 14px;
+      border: 2px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--ink);
+    }
+    input:focus-visible, button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+    button {
+      font: inherit;
+      padding: 0 16px;
+      border: 2px solid var(--ink);
+      border-radius: 8px;
+      background: var(--ink);
+      color: #fff;
+      cursor: pointer;
+    }
+
+    /* मीटर: ये पट्टी पासवर्ड के हिसाब से भरती है */
+    .meter { height: 12px; margin: 18px 0 8px; background: var(--line); border-radius: 6px; overflow: hidden; }
+    .meter div { height: 100%; width: 0; background: var(--weak); transition: width .25s, background .25s; }
+    #verdict { font-weight: 600; font-size: 1.2rem; min-height: 1.8rem; margin: 0 0 14px; }
+
+    ul { list-style: none; padding: 0; margin: 0; }
+    li { padding: 7px 0 7px 30px; position: relative; color: var(--muted); border-top: 1px solid var(--line); }
+    li::before { content: "✗"; position: absolute; left: 4px; color: var(--weak); font-weight: 700; }
+    li.pass { color: var(--ink); }
+    li.pass::before { content: "✓"; color: var(--strong); }
+
+
+    #tip { min-height: 1.4rem; margin: -6px 0 12px; color: var(--muted); font-size: .95rem; }
+    .suggest { margin-top: 20px; padding: 16px; border: 2px dashed var(--ink); border-radius: 10px; background: #fff; }
+    .suggest h2 { font-size: 1.05rem; margin: 0 0 4px; }
+    .suggest small { color: var(--muted); }
+    #gen { display: block; margin: 10px 0; padding: 10px 12px; font: 1.15rem/1.3 ui-monospace, Menlo, Consolas, monospace; background: var(--bg); border-radius: 6px; word-break: break-all; user-select: all; }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    .actions button { padding: 9px 14px; background: #fff; color: var(--ink); }
+    .actions button.primary { background: var(--ink); color: #fff; }
+
+    .note { margin-top: 18px; font-size: .9rem; color: var(--muted); }
+    @media (prefers-reduced-motion: reduce) { .meter div { transition: none; } }
+  </style>
+</head>
+
+<body>
+  <!-- ===== HTML: ढाँचा (पेज पर क्या-क्या होगा) ===== -->
+  <main>
+    <h1>पासवर्ड चेकर</h1>
+    <p class="sub">पासवर्ड टाइप करें, तुरंत पता चल जाएगा कि वो कितना मज़बूत है।</p>
+
+    <div class="field">
+      <input id="pw" type="password" placeholder="अपना पासवर्ड लिखें" autocomplete="off" aria-label="पासवर्ड">
+      <button id="toggle" type="button">दिखाएँ</button>
+    </div>
+
+    <div class="meter" aria-hidden="true"><div id="bar"></div></div>
+    <p id="verdict" aria-live="polite"></p>
+
+    <p id="tip" aria-live="polite"></p>
+
+    <ul id="rules">
+      <li data-rule="length">कम से कम 8 अक्षर</li>
+      <li data-rule="long">12 या उससे ज़्यादा अक्षर (बेहतर)</li>
+      <li data-rule="lower">छोटा अक्षर (a-z)</li>
+      <li data-rule="upper">बड़ा अक्षर (A-Z)</li>
+      <li data-rule="number">कोई नंबर (0-9)</li>
+      <li data-rule="special">कोई स्पेशल निशान (जैसे @ # $ !)</li>
+    </ul>
+
+    <section class="suggest">
+      <h2>मज़बूत पासवर्ड का सुझाव</h2>
+      <small>बड़े + छोटे अक्षर, नंबर और स्पेशल निशान का मिक्स</small>
+      <code id="gen"></code>
+      <div class="actions">
+        <button id="use" type="button" class="primary">इसे इस्तेमाल करें</button>
+        <button id="copy" type="button">कॉपी करें</button>
+        <button id="again" type="button">नया सुझाव</button>
+      </div>
+    </section>
+
+    <p class="note">आपका पासवर्ड कहीं भेजा या सेव नहीं होता। सारी जाँच आपके ब्राउज़र में ही होती है।</p>
+  </main>
+
+  <!-- ===== JavaScript: दिमाग़ (जाँच का लॉजिक) ===== -->
+  <script>
+    const input = document.getElementById("pw");
+    const bar = document.getElementById("bar");
+    const verdict = document.getElementById("verdict");
+    const tip = document.getElementById("tip");
+    const toggle = document.getElementById("toggle");
+    const items = document.querySelectorAll("#rules li");
+
+    // हर नियम के लिए एक जाँच: पासवर्ड ठीक है तो true, वरना false
+    const rules = {
+      length:  (p) => p.length >= 8,
+      long:    (p) => p.length >= 12,
+      lower:   (p) => /[a-z]/.test(p),
+      upper:   (p) => /[A-Z]/.test(p),
+      number:  (p) => /[0-9]/.test(p),
+      special: (p) => /[^A-Za-z0-9]/.test(p)
+    };
+
+    function check() {
+      const p = input.value;
+      let score = 0;
+
+      // हर नियम चलाओ, पास हुआ तो टिक लगाओ और स्कोर बढ़ाओ
+      items.forEach((li) => {
+        const passed = rules[li.dataset.rule](p);
+        li.classList.toggle("pass", passed);
+        if (passed) score++;
+      });
+
+      // कुछ टाइप नहीं किया तो सब ख़ाली कर दो
+      if (p === "") {
+        bar.style.width = "0";
+        verdict.textContent = "";
+        tip.textContent = "";
+        return;
+      }
+
+      // सलाह: बड़े और छोटे अक्षर दोनों होने चाहिए
+      const hasLower = rules.lower(p), hasUpper = rules.upper(p);
+      if (!hasLower || !hasUpper) {
+        tip.textContent = "सलाह: बड़े और छोटे दोनों तरह के अक्षर मिलाइए (जैसे aB, Xy)।";
+      } else {
+        tip.textContent = "";
+      }
+
+      // स्कोर (0 से 6) के हिसाब से फ़ैसला
+      let label, color;
+      if (score <= 2)      { label = "कमज़ोर";  color = "var(--weak)"; }
+      else if (score <= 4) { label = "ठीक-ठाक"; color = "var(--ok)"; }
+      else                 { label = "मज़बूत";  color = "var(--strong)"; }
+
+      bar.style.width = (score / 6) * 100 + "%";
+      bar.style.background = color;
+      verdict.textContent = label;
+      verdict.style.color = color;
+    }
+
+    // हर बार कुछ टाइप होने पर check() चलाओ
+    input.addEventListener("input", check);
+
+    // "दिखाएँ / छुपाएँ" बटन
+    toggle.addEventListener("click", () => {
+      const hidden = input.type === "password";
+      input.type = hidden ? "text" : "password";
+      toggle.textContent = hidden ? "छुपाएँ" : "दिखाएँ";
+    });
+
+    // ===== मज़बूत पासवर्ड बनाने वाला हिस्सा =====
+    const SETS = {
+      lower:   "abcdefghijkmnpqrstuvwxyz",   // l, o हटाए (धोखा देते हैं)
+      upper:   "ABCDEFGHJKLMNPQRSTUVWXYZ",   // I, O हटाए
+      number:  "23456789",                   // 0, 1 हटाए
+      special: "@#$%&*!?"
+    };
+
+    // असली random नंबर (Math.random से ज़्यादा सुरक्षित)
+    function randomIndex(max) {
+      const a = new Uint32Array(1);
+      crypto.getRandomValues(a);
+      return a[0] % max;
+    }
+
+    function generatePassword(len = 14) {
+      const groups = Object.values(SETS);
+      const all = groups.join("");
+      // पहले हर तरह का एक-एक अक्षर पक्का डालो
+      const chars = groups.map((g) => g[randomIndex(g.length)]);
+      // बाक़ी जगह किसी भी सेट से भरो
+      while (chars.length < len) chars.push(all[randomIndex(all.length)]);
+      // अक्षरों को आपस में फेंट दो (shuffle)
+      for (let i = chars.length - 1; i > 0; i--) {
+        const j = randomIndex(i + 1);
+        [chars[i], chars[j]] = [chars[j], chars[i]];
+      }
+      return chars.join("");
+    }
+
+    const gen = document.getElementById("gen");
+    const refresh = () => { gen.textContent = generatePassword(); };
+
+    document.getElementById("again").addEventListener("click", refresh);
+    document.getElementById("use").addEventListener("click", () => {
+      input.value = gen.textContent;
+      check();
+    });
+    document.getElementById("copy").addEventListener("click", async (e) => {
+      try {
+        await navigator.clipboard.writeText(gen.textContent);
+        e.target.textContent = "कॉपी हो गया";
+      } catch (err) {
+        e.target.textContent = "ख़ुद चुनकर कॉपी करें";
+      }
+      setTimeout(() => (e.target.textContent = "कॉपी करें"), 1800);
+    });
+
+    refresh(); // पेज खुलते ही पहला सुझाव दिखाओ
+  </script>
+</body>
+</html>
